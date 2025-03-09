@@ -1,40 +1,49 @@
 (function () {
   'use strict';
 
-  const adSelectors = [
-    '.ytd-promoted-video-renderer',
-    'ytd-display-ad-renderer',
-    '.ytp-ad-module',
-    '.video-ads',
-    '.ytp-ad-player-overlay',
-    '.ytp-ad-overlay-image',
-    '.ytp-ad-overlay-container',
-    '.ytp-ad-skip-button-container',
-    '.ytp-ad-preview-container',
-    '.ytp-ad-text',
-    '#player-ads',
-    '.ytp-ad-message-container'
-  ];
+  // Prevent YouTube from loading ad modules
+  Object.defineProperty(window, 'ytInitialPlayerResponse', {
+    get: function () {
+      return this._ytInitialPlayerResponse || {};
+    },
+    set: function (val) {
+      if (val && val.adPlacements) {
+        delete val.adPlacements;
+      }
+      this._ytInitialPlayerResponse = val;
+    }
+  });
 
-  function removeYTAds() {
-    adSelectors.forEach(selector => {
+  // Catch YouTube's playerResponse ad payload
+  const originalDefineProperty = Object.defineProperty;
+  Object.defineProperty = function (obj, prop, descriptor) {
+    if (prop === 'playerResponse' && descriptor && descriptor.set) {
+      const originalSetter = descriptor.set;
+      descriptor.set = function (val) {
+        if (val && val.adPlacements) {
+          delete val.adPlacements;
+        }
+        return originalSetter.call(this, val);
+      };
+    }
+    return originalDefineProperty.call(Object, obj, prop, descriptor);
+  };
+
+  // Also try removing ad modules
+  const removeAds = () => {
+    const adContainers = [
+      '.ytp-ad-module',
+      '.ytp-ad-player-overlay',
+      '.ytp-ad-overlay-container',
+      '.ytp-ad-skip-button-container',
+      '.video-ads',
+      '#player-ads'
+    ];
+    adContainers.forEach(selector => {
       document.querySelectorAll(selector).forEach(el => el.remove());
     });
+  };
 
-    // Skip video ads if visible
-    const skipBtn = document.querySelector('.ytp-ad-skip-button');
-    if (skipBtn) skipBtn.click();
-  }
-
-  // Initial cleanup
-  window.addEventListener('load', () => {
-    removeYTAds();
-  });
-
-  // Monitor for dynamically added ads
-  const observer = new MutationObserver(() => {
-    removeYTAds();
-  });
-
+  const observer = new MutationObserver(removeAds);
   observer.observe(document.body, { childList: true, subtree: true });
 })();
